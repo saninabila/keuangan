@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dompetku - Keuangan Pribadi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-amber-50 min-h-screen text-stone-800 font-sans p-4 md:p-8">
+  <div class="max-w-4xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <header class="text-center py-4 bg-amber-900 text-amber-100 rounded-2xl shadow-md">
+      <h1 class="text-3xl font-bold">🍩 Dompetku</h1>
+      <p class="text-sm text-amber-200 mt-1">Pencatatan Pemasukan & Pengeluaran Pribadi</p>
+    </header>
+
+    <!-- Ringkasan Saldo -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100">
+        <p class="text-xs uppercase tracking-wider text-stone-400 font-semibold">Total Pemasukan</p>
+        <h3 id="totalIncome" class="text-2xl font-bold text-emerald-600 mt-1">Rp 0</h3>
+      </div>
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100">
+        <p class="text-xs uppercase tracking-wider text-stone-400 font-semibold">Total Pengeluaran</p>
+        <h3 id="totalExpense" class="text-2xl font-bold text-rose-600 mt-1">Rp 0</h3>
+      </div>
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100">
+        <p class="text-xs uppercase tracking-wider text-stone-400 font-semibold">Sisa Saldo</p>
+        <h3 id="netBalance" class="text-2xl font-bold text-amber-900 mt-1">Rp 0</h3>
+      </div>
+    </div>
+
+    <!-- Form Input & Daftar Transaksi -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      
+      <!-- Form Input -->
+      <form id="txForm" class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100 space-y-4 md:col-span-1">
+        <h2 class="font-bold text-lg text-amber-900 border-b pb-2">Tambah Transaksi</h2>
+        
+        <div>
+          <label class="block text-xs font-semibold text-stone-600 mb-1">Judul Transaksi</label>
+          <input type="text" id="title" required placeholder="Contoh: Gaji, Kue, Bensin" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-600 mb-1">Nominal (Rp)</label>
+          <input type="number" id="amount" required placeholder="50000" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-600 mb-1">Tipe</label>
+          <select id="type" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-amber-500 outline-none">
+            <option value="expense">Pengeluaran</option>
+            <option value="income">Pemasukan</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-600 mb-1">Kategori</label>
+          <input type="text" id="category" placeholder="Makanan, Transport, dll" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-600 mb-1">Tanggal</label>
+          <input type="date" id="date" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+
+        <button type="submit" class="w-full bg-amber-800 hover:bg-amber-900 text-white font-semibold py-2.5 rounded-xl transition">Simpan Transaksi</button>
+      </form>
+
+      <!-- Tabel / List Transaksi -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100 md:col-span-2">
+        <h2 class="font-bold text-lg text-amber-900 border-b pb-2 mb-4">Riwayat Transaksi</h2>
+        <div class="overflow-y-auto max-h-[400px]">
+          <ul id="txList" class="space-y-3">
+            <li class="text-center text-stone-400 py-4">Memuat data...</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('txForm');
+    const txList = document.getElementById('txList');
+    const formatIDR = (num) => 'Rp ' + Number(num).toLocaleString('id-ID');
+
+    document.getElementById('date').valueAsDate = new Date();
+
+    async function loadTransactions() {
+      try {
+        const res = await fetch('/api/transactions');
+        const { data } = await res.json();
+        
+        let income = 0;
+        let expense = 0;
+        txList.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          txList.innerHTML = '<li class="text-center text-stone-400 py-4">Belum ada transaksi</li>';
+        } else {
+          data.forEach(item => {
+            if (item.type === 'income') income += item.amount;
+            else expense += item.amount;
+
+            const isIncome = item.type === 'income';
+            const li = document.createElement('li');
+            li.className = 'flex justify-between items-center p-3 rounded-xl bg-amber-50/50 border border-amber-100';
+            li.innerHTML = `
+              <div>
+                <p class="font-semibold text-stone-800">${item.title}</p>
+                <p class="text-xs text-stone-400">${item.category} • ${item.date}</p>
+              </div>
+              <div class="flex items-center space-x-3">
+                <span class="font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}">
+                  ${isIncome ? '+' : '-'} ${formatIDR(item.amount)}
+                </span>
+                <button onclick="deleteTx('${item.id}')" class="text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1">✕</button>
+              </div>
+            `;
+            txList.appendChild(li);
+          });
+        }
+
+        document.getElementById('totalIncome').innerText = formatIDR(income);
+        document.getElementById('totalExpense').innerText = formatIDR(expense);
+        document.getElementById('netBalance').innerText = formatIDR(income - expense);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        title: document.getElementById('title').value,
+        amount: document.getElementById('amount').value,
+        type: document.getElementById('type').value,
+        category: document.getElementById('category').value,
+        date: document.getElementById('date').value
+      };
+
+      await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      form.reset();
+      document.getElementById('date').valueAsDate = new Date();
+      loadTransactions();
+    });
+
+    async function deleteTx(id) {
+      if (confirm('Hapus transaksi ini?')) {
+        await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+        loadTransactions();
+      }
+    }
+
+    loadTransactions();
+  </script>
+</body>
+</html>
