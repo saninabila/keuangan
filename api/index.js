@@ -56,32 +56,43 @@ function loadDotEnv() {
 loadDotEnv();
 
 function resolveServiceAccount() {
-  const candidates = [
-    process.env.FIREBASE_SERVICE_ACCOUNT,
-    process.env.FIREBASE_KEY,
-    process.env.GOOGLE_SERVICE_ACCOUNT
-  ].filter(Boolean);
+  const problems = [];
 
-  for (const candidate of candidates) {
-    const value = String(candidate).trim();
+  function parseJson(text, label) {
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      problems.push(`${label}: ${error.message}`);
+      return null;
+    }
+  }
+
+  const sources = [
+    ['FIREBASE_SERVICE_ACCOUNT', process.env.FIREBASE_SERVICE_ACCOUNT],
+    ['FIREBASE_KEY', process.env.FIREBASE_KEY],
+    ['GOOGLE_SERVICE_ACCOUNT', process.env.GOOGLE_SERVICE_ACCOUNT]
+  ];
+
+  for (const [name, raw] of sources) {
+    const value = String(raw || '').trim();
     if (!value) continue;
 
-    if (value.startsWith('{')) {
-      return JSON.parse(value);
-    }
+    // Nilai bisa berupa JSON langsung atau JSON yang di-encode base64.
+    const candidates = value.startsWith('{')
+      ? [value]
+      : [Buffer.from(value, 'base64').toString('utf8')];
 
-    // Dukungan nilai base64 (kadang dipakai agar aman di env var)
-    try {
-      const decoded = Buffer.from(value, 'base64').toString('utf8');
-      if (decoded.trim().startsWith('{')) return JSON.parse(decoded);
-    } catch (error) {
-      // abaikan, lanjut ke sumber berikutnya
+    for (const text of candidates) {
+      if (!text.trim().startsWith('{')) continue;
+      const parsed = parseJson(text, name);
+      if (parsed) return parsed;
     }
   }
 
   const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (credentialPath && fs.existsSync(credentialPath)) {
-    return JSON.parse(fs.readFileSync(credentialPath, 'utf8'));
+    const parsed = parseJson(fs.readFileSync(credentialPath, 'utf8'), 'GOOGLE_APPLICATION_CREDENTIALS');
+    if (parsed) return parsed;
   }
 
   // Fallback: file service account yang ikut di folder proyek
@@ -90,8 +101,13 @@ function resolveServiceAccount() {
     .filter((name) => name.endsWith('.json') && name.includes('firebase-adminsdk'))
     .sort();
 
-  if (files.length > 0) {
-    return JSON.parse(fs.readFileSync(path.join(ROOT, files[0]), 'utf8'));
+  for (const file of files) {
+    const parsed = parseJson(fs.readFileSync(path.join(ROOT, file), 'utf8'), file);
+    if (parsed) return parsed;
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`Kredensial Firebase tidak valid -> ${problems.join('; ')}`);
   }
 
   return null;
