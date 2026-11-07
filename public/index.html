@@ -86,40 +86,52 @@
     const form = document.getElementById('txForm');
     const txList = document.getElementById('txList');
     const formatIDR = (num) => 'Rp ' + Number(num).toLocaleString('id-ID');
+    const escapeHtml = (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
     document.getElementById('date').valueAsDate = new Date();
 
     async function loadTransactions() {
       try {
         const res = await fetch('/api/transactions');
-        const { data } = await res.json();
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload.success) {
+          throw new Error(payload.error || `Gagal memuat data (HTTP ${res.status})`);
+        }
+        const data = Array.isArray(payload.data) ? payload.data : [];
         
         let income = 0;
         let expense = 0;
         txList.innerHTML = '';
 
-        if (!data || data.length === 0) {
+        if (data.length === 0) {
           txList.innerHTML = '<li class="text-center text-stone-400 py-4">Belum ada transaksi</li>';
         } else {
           data.forEach(item => {
-            if (item.type === 'income') income += item.amount;
-            else expense += item.amount;
+            const amount = Number(item.amount) || 0;
+            if (item.type === 'income') income += amount;
+            else expense += amount;
 
             const isIncome = item.type === 'income';
             const li = document.createElement('li');
             li.className = 'flex justify-between items-center p-3 rounded-xl bg-amber-50/50 border border-amber-100';
             li.innerHTML = `
               <div>
-                <p class="font-semibold text-stone-800">${item.title}</p>
-                <p class="text-xs text-stone-400">${item.category} • ${item.date}</p>
+                <p class="font-semibold text-stone-800">${escapeHtml(item.title)}</p>
+                <p class="text-xs text-stone-400">${escapeHtml(item.category || 'Umum')} • ${escapeHtml(item.date)}</p>
               </div>
               <div class="flex items-center space-x-3">
                 <span class="font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}">
-                  ${isIncome ? '+' : '-'} ${formatIDR(item.amount)}
+                  ${isIncome ? '+' : '-'} ${formatIDR(amount)}
                 </span>
-                <button onclick="deleteTx('${item.id}')" class="text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1">✕</button>
+                <button data-id="${escapeHtml(item.id)}" class="text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1">✕</button>
               </div>
             `;
+            li.querySelector('button').addEventListener('click', () => deleteTx(item.id));
             txList.appendChild(li);
           });
         }
@@ -129,6 +141,14 @@
         document.getElementById('netBalance').innerText = formatIDR(income - expense);
       } catch (err) {
         console.error(err);
+        txList.innerHTML = '';
+        const li = document.createElement('li');
+        li.className = 'text-center text-rose-600 py-4 text-sm';
+        li.textContent = 'Gagal memuat data: ' + err.message;
+        txList.appendChild(li);
+        document.getElementById('totalIncome').innerText = formatIDR(0);
+        document.getElementById('totalExpense').innerText = formatIDR(0);
+        document.getElementById('netBalance').innerText = formatIDR(0);
       }
     }
 
@@ -142,21 +162,39 @@
         date: document.getElementById('date').value
       };
 
-      await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+      try {
+        const res = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload.success) {
+          throw new Error(payload.error || `Gagal menyimpan (HTTP ${res.status})`);
+        }
 
-      form.reset();
-      document.getElementById('date').valueAsDate = new Date();
-      loadTransactions();
+        form.reset();
+        document.getElementById('date').valueAsDate = new Date();
+        loadTransactions();
+      } catch (err) {
+        console.error(err);
+        alert('Transaksi gagal disimpan: ' + err.message);
+      }
     });
 
     async function deleteTx(id) {
       if (confirm('Hapus transaksi ini?')) {
-        await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
-        loadTransactions();
+        try {
+          const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || !payload.success) {
+            throw new Error(payload.error || `Gagal menghapus (HTTP ${res.status})`);
+          }
+          loadTransactions();
+        } catch (err) {
+          console.error(err);
+          alert('Transaksi gagal dihapus: ' + err.message);
+        }
       }
     }
 
