@@ -96,18 +96,30 @@ function resolveServiceAccount() {
   }
 
   // Fallback: file service account yang ikut di folder proyek
-  const files = fs
-    .readdirSync(ROOT)
-    .filter((name) => name.endsWith('.json') && name.includes('firebase-adminsdk'))
-    .sort();
+  // (di Vercel file ini ikut dibundel lewat includeFiles di vercel.json)
+  for (const dir of [...new Set([ROOT, process.cwd(), __dirname])]) {
+    let names = [];
+    try {
+      names = fs.readdirSync(dir);
+    } catch (error) {
+      continue;
+    }
 
-  for (const file of files) {
-    const parsed = parseJson(fs.readFileSync(path.join(ROOT, file), 'utf8'), file);
-    if (parsed) return parsed;
+    const files = names
+      .filter((name) => name.endsWith('.json') && name.includes('firebase-adminsdk'))
+      .sort();
+
+    for (const file of files) {
+      const parsed = parseJson(fs.readFileSync(path.join(dir, file), 'utf8'), file);
+      if (parsed) return parsed;
+    }
   }
 
   if (problems.length > 0) {
-    throw new Error(`Kredensial Firebase tidak valid -> ${problems.join('; ')}`);
+    throw new Error(
+      `Kredensial Firebase tidak valid -> ${problems.join('; ')}. ` +
+        'Periksa apakah nilai environment variable terpotong saat ditempel (harus satu baris utuh dari { sampai }).'
+    );
   }
 
   return null;
